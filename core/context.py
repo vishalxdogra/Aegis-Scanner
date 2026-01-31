@@ -1,82 +1,52 @@
-# core/context.py
 import requests
 from datetime import datetime
-from urllib.parse import urlparse
 
 
 class ScanContext:
-    def __init__(
-        self,
-        target,
-        mode="CONTROLLED",
-        timeout=8,
-        max_urls=150,
-        max_depth=2
-    ):
+    def __init__(self, target):
         self.target = target
-        self.mode = mode
-        self.timeout = timeout
-        self.max_urls = max_urls
-        self.max_depth = max_depth
-
         self.session = requests.Session()
         self.session.headers.update({
             "User-Agent": "ULTIMATE-Scanner/1.0"
         })
 
-        self.start_time = datetime.utcnow()
-
         self.findings = []
-        self.stats = {
-            "requests": 0,
-            "urls_crawled": 0,
-            "forms_tested": 0,
-            "errors": 0
-        }
+        self.is_authenticated = False
+        self.stats = {"requests": 0, "errors": 0}
+        self.started = datetime.utcnow()
 
-    # -------------------------
-    # Request wrappers
-    # -------------------------
     def get(self, url, **kwargs):
-        self._enforce_scope(url)
+        if not self.target.in_scope(url):
+            return None
+
         self.stats["requests"] += 1
         try:
-            return self.session.get(url, timeout=self.timeout, **kwargs)
+            r = self.session.get(url, timeout=8, allow_redirects=True, **kwargs)
+            return r
         except Exception:
             self.stats["errors"] += 1
             return None
 
     def post(self, url, data=None, **kwargs):
-        self._enforce_scope(url)
+        if not self.target.in_scope(url):
+            return None
+
         self.stats["requests"] += 1
         try:
-            return self.session.post(url, data=data, timeout=self.timeout, **kwargs)
+            return self.session.post(url, data=data, timeout=8, allow_redirects=True, **kwargs)
         except Exception:
             self.stats["errors"] += 1
             return None
 
-    # -------------------------
-    # Scope enforcement
-    # -------------------------
-    def _enforce_scope(self, url):
-        parsed = urlparse(url)
-        if parsed.hostname and parsed.hostname != self.target.host:
-            raise RuntimeError(f"Out-of-scope request blocked: {url}")
-
-    # -------------------------
-    # Findings
-    # -------------------------
     def add_finding(self, finding):
         self.findings.append(finding)
 
-    # -------------------------
-    # Reporting
-    # -------------------------
     def summary(self):
         return {
             "target": str(self.target),
-            "mode": self.mode,
-            "started": self.start_time.isoformat(),
-            "stats": self.stats,
-            "findings": len(self.findings)
+            "started": self.started.isoformat(),
+            "requests": self.stats["requests"],
+            "errors": self.stats["errors"],
+            "findings": len(self.findings),
+            "authenticated": self.is_authenticated
         }

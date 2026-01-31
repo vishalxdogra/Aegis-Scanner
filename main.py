@@ -1,133 +1,140 @@
 from core.target import Target
-from core.environment import EnvironmentProfile
 from core.context import ScanContext
+from core.auth import AuthManager
+from core.auth_profile import AuthProfile
+from core.requester import Requester
 
 from recon.port_scanner import PortScanner
 from recon.crawler import Crawler
 from recon.service_fingerprint import ServiceFingerprinter
 
-from analysis.attack_surface import AttackSurface
-from analysis.forms import FormExtractor
-# from attacks.sqli_engine import SQLiScanner
-from analysis.parameters import ParameterDiscovery
-
-from core.requester import Requester
 from analysis.injection_factory import InjectionPointFactory
+from analysis.risk_engine import RiskEngine
+from analysis.finding_deduplicator import FindingDeduplicator
+from analysis.point_deduplicator import dedupe_points
 from attacks.sqli_engine import SQLiEngine
 
+import time
 
 
 def main():
     url = input("Enter target URL: ").strip()
-
-    # ---------------- TARGET & ENV ----------------
     target = Target(url)
+    ctx = ScanContext(target)
+
     print(f"\n[*] Target: {target}")
 
-    env = EnvironmentProfile(target)
-    env.analyze()
-    mode = env.scan_mode()
+    # ================= AUTH =================
+    if input("Use authentication? (y/n): ").lower() == "y":
+        print("[*] Configure authentication")
 
-    print(f"[*] Scan mode: {mode}")
+        login_url = input("Login URL: ").strip()
+        method = input("Method (POST/GET) [POST]: ").strip() or "POST"
 
-    ctx = ScanContext(target=target, mode=mode)
+        fields = {}
+        print("Enter login fields (blank key to stop)")
+        while True:
+            k = input("Field name: ").strip()
+            if not k:
+                break
+            v = input("Field value: ").strip()
+            fields[k] = v
 
-    # ---------------- PORT SCAN ----------------
+        csrf = input("Use CSRF token? (y/n): ").lower() == "y"
+        csrf_url = csrf_field = csrf_regex = None
+
+        if csrf:
+            csrf_url = input("CSRF page URL: ").strip()
+            csrf_field = input("CSRF field name: ").strip()
+            csrf_regex = input("CSRF regex (group 1): ").strip()
+
+        profile = AuthProfile(
+            login_url=login_url,
+            method=method,
+            fields=fields,
+            csrf_url=csrf_url,
+            csrf_field=csrf_field,
+            csrf_regex=csrf_regex,
+            success_check=lambda t: "logout" in t.lower() or "dashboard" in t.lower()
+        )
+
+        AuthManager(ctx).authenticate(profile)
+    else:
+        print("[*] Running unauthenticated scan")
+
+    # ================= RECON =================
     print("\n[*] Scanning ports...")
     ports = PortScanner(target.host).scan()
+    print("[+] Open ports:", ports)
 
-    if ports:
-        print("[+] Open ports:")
-        for p in ports:
-            print(f"  - {p}")
-    else:
-        print("[-] No open ports found")
-
-    # ---------------- SERVICE FINGERPRINT ----------------
     print("\n[*] Fingerprinting services...")
     services = ServiceFingerprinter(target.host, ports).fingerprint()
 
-    web_targets = []
-    for port, info in services.items():
-        print(
-            f"  - Port {port}: "
-            f"{info['type'].upper()} | "
-            f"Status={info['status']} | "
-            f"Server={info['server']}"
-        )
-        web_targets.append(info["url"])
+    web_targets = {target.base_url()}
+    for s in services.values():
+        if isinstance(s, dict) and "url" in s:
+            web_targets.add(s["url"])
 
-    # ---------------- CRAWLING ----------------
-    print("\n[*] Crawling web applications...")
-    urls = set()
+    # ================= CRAWL =================
+    print("\n[*] Crawling...")
+    urls, forms = set(), []
 
     for base in web_targets:
-        print(f"  [+] Crawling {base}")
-        urls |= Crawler(base).crawl()
+        u, f = Crawler(base).crawl()
+        urls |= u
+        forms.extend(f)
 
-    print(f"\n[+] Total URLs discovered: {len(urls)}")
+    urls.add(target.original)
+    print(f"[+] URLs discovered: {len(urls)}")
 
-    for u in list(urls)[:20]:  # limit output
-        print(f"  - {u}")
-
-    if len(urls) > 20:
-        print(f"  ... {len(urls) - 20} more URLs")
-
-    form_extractor = FormExtractor(session=ctx.session)
-
-    # ---------------- ATTACK SURFACE ----------------
-    print("\n[*] Classifying attack surface...")
-    surface = AttackSurface(urls).analyze()
-
-    for category, items in surface.items():
-        print(f"  - {category.upper()}: {len(items)} URLs")
-
-    # ---- PARAMETER DISCOVERY ----
-    print("\n[*] Discovering injectable parameters...")
-    param_urls = ParameterDiscovery(urls).discover()
-    print(f"[+] Generated {len(param_urls)} parameterized URLs")
-
-
-    # ---------------- BUILD INJECTION POINTS ----------------
+    # ================= INJECTION POINTS =================
     print("\n[*] Building injection points...")
-
     points = []
 
-    # From discovered URLs
-    for url in urls:
-        points.extend(InjectionPointFactory.from_url(url))
+    for u in urls:
+        points.extend(InjectionPointFactory.from_url(u))
 
-    # From discovered forms
-    for url in urls:
-        for form in form_extractor.extract_forms(url):
-            points.extend(InjectionPointFactory.from_form(form))
+    for f in forms:
+        points.extend(InjectionPointFactory.from_form(f))
 
-    print(f"[+] Total injection points: {len(points)}")
+    for u in urls:
+        points.extend(InjectionPointFactory.from_json_endpoint(u))
 
-    # ---------------- SQL INJECTION ----------------
-    print("\n[*] Running unified SQL Injection engine...")
+    points = dedupe_points(points)
 
+    # ================= SQLi =================
+    print("\n[*] Running SQLi engine...")
     engine = SQLiEngine(Requester(ctx))
+    risk_engine = RiskEngine()
 
-    for point in points:
-        finding = engine.test(point)
+    start = time.time()
+
+    for i, p in enumerate(points, 1):
+        print(f"[SQLi] {i}/{len(points)} | {p.method} {p.url} | param={p.target_param}")
+        print("[DEBUG] InjectionPoint:",
+            p.url,
+            p.method,
+            p.target_param,
+            p.params,
+            p.content_type)
+        finding = engine.test(p)
         if finding:
+            finding.risk = risk_engine.score(finding)
             ctx.add_finding(finding)
-    
 
-    # ---------------- RESULTS ----------------
+    findings = FindingDeduplicator.deduplicate(ctx.findings)
     print("\n[SQLi Findings]")
+    for f in findings:
+        print(
+            f"- {f.method} {f.url} "
+            f"param={f.parameter} "
+            f"type={f.technique} "
+            f"confidence={f.confidence}"
+        )
+    print(f"\n[*] SQLi scan completed in {round(time.time() - start, 2)}s")
+    print("\n[*] Summary")
+    print(ctx.summary())
 
-    if not ctx.findings:
-        print("[-] No SQL Injection detected")
-    else:
-        for f in ctx.findings:
-            print(
-                f"  - {f['method']} SQLi | {f['url']} | "
-                f"param={f['parameter']} | "
-                f"confidence={f['confidence']} | "
-                f"technique={f['technique']}"
-            )
 
 if __name__ == "__main__":
     main()

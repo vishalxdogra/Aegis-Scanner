@@ -1,10 +1,13 @@
 🛡️ Aegis Scanner
 
-Professional Automated Web Security Scanner
+Automated Web Application Security Scanner
+Reconnaissance • Attack Surface Discovery • SQL Injection Detection
 
-Aegis Scanner is a modular, professional-grade web application security scanner that automates reconnaissance, attack surface discovery, and SQL Injection detection using a unified injection engine.
+Aegis Scanner is a modular, professional-grade web security scanner designed to automate real-world penetration testing workflows.
+It focuses on accurate attack surface mapping and reliable SQL Injection detection using a unified and extensible engine.
 
-It is designed to reflect real-world penetration testing workflows, not toy scripts.
+This project is built with clean architecture, low false positives, and future exploitability in mind.
+It is not a toy script. It reflects how modern security tools are structured internally.
 
 ⸻
 
@@ -12,111 +15,76 @@ It is designed to reflect real-world penetration testing workflows, not toy scri
 
 🔍 Reconnaissance
 	•	Open port scanning
-	•	Service fingerprinting (HTTP/HTTPS detection)
-	•	Automatic web target identification
-	•	Controlled scanning mode (safe by default)
+	•	Web service identification (HTTP / HTTPS)
+	•	Automatic web target detection
+	•	Safe, controlled scanning by default
 
 🌐 Web Discovery
-	•	Recursive crawling across discovered services
+	•	Recursive crawling
 	•	URL normalization and deduplication
-	•	Parameterized URL generation
-	•	HTML form extraction (GET + POST)
+	•	Parameter discovery
+	•	HTML form extraction
+	•	GET forms
+	•	POST forms
 
 🎯 Injection Point Engine
-	•	Unified handling of:
+	•	Unified InjectionPoint abstraction
+	•	Supports:
 	•	GET parameters
 	•	POST parameters
 	•	HTML form fields
-	•	InjectionPoint abstraction (professional design)
+	•	Centralized handling for all attack modules
 
 💉 SQL Injection Detection
 
-Supports multiple SQLi techniques in a single pipeline:
+Single engine supporting multiple SQLi techniques:
 	•	Numeric SQL Injection
 	•	String-based SQL Injection
-	•	Single quote (')
-	•	Double quote (")
-	•	Boolean-based SQLi
-	•	Error-based SQLi
-	•	GET-based SQLi
-	•	POST-based SQLi
-	•	Form-driven SQLi
+	•	Single quote (') injections
+	•	Double quote (") injections
+	•	Boolean-based SQL Injection
+	•	Error-based SQL Injection
+	•	GET-based SQL Injection
+	•	POST-based SQL Injection
+	•	Form-driven SQL Injection
 
-🧠 Context-Aware Engine
+🧠 Context-Aware Detection
 	•	Baseline response comparison
 	•	Length-based differential analysis
 	•	SQL error fingerprinting
-	•	Confidence scoring
+	•	Confidence scoring to reduce false positives
 
-📊 Output
-	•	Clear terminal reporting
-	•	Confidence level per finding
-	•	Technique identification
+📊 Reporting
+	•	Clear terminal output
 	•	Parameter-level vulnerability mapping
-
-⸻
-
-🏗️ Project Architecture
-
-Aegis-Scanner/
-│
-├── main.py                     # Entry point
-│
-├── core/
-│   ├── target.py               # Target abstraction
-│   ├── environment.py          # WAF / environment detection
-│   ├── context.py              # Shared scan context
-│   ├── requester.py            # Central HTTP requester
-│   └── injection_point.py      # InjectionPoint model
-│
-├── recon/
-│   ├── port_scanner.py
-│   ├── crawler.py
-│   └── service_fingerprint.py
-│
-├── analysis/
-│   ├── attack_surface.py
-│   ├── forms.py
-│   ├── parameters.py
-│   └── injection_factory.py
-│
-├── attacks/
-│   └── sqli_engine.py           # Unified SQLi engine
-│
-└── requirements.txt
-
-
-
-
-
-⸻
-
+	•	Technique identification
+	•	Confidence level per finding
 🧪 How It Works (High Level)
 	1.	Reconnaissance
-	•	Scan ports
+	•	Scan open ports
 	•	Identify live web services
 	2.	Discovery
-	•	Crawl websites
+	•	Crawl discovered websites
 	•	Extract URLs, parameters, and forms
 	3.	Injection Modeling
-	•	Convert URLs + forms into InjectionPoints
-	4.	Unified SQLi Engine
-	•	Apply numeric + string payloads
-	•	Compare responses
-	•	Detect errors and behavioral differences
+	•	Convert URLs and forms into InjectionPoints
+	4.	SQL Injection Engine
+	•	Apply numeric and string payloads
+	•	Compare baseline vs injected responses
+	•	Detect behavioral and error-based differences
 	5.	Reporting
-	•	High-confidence findings only
-	•	Minimal false positives
+	•	Only high-confidence findings are reported
+	•	Reduced noise and false positives
 
 ⸻
 
-🛠️ Installation
+▶️ Usage
 
 Requirements
 	•	Python 3.9+
 	•	Linux / macOS recommended
-----------------------------------------------------------
-Setup:
+
+Setup-
 
 git clone https://github.com/vishalxdogra/Aegis-Scanner.git
 cd Aegis-Scanner
@@ -126,18 +94,29 @@ source .venv/bin/activate
 
 pip install -r requirements.txt
 
-
-▶️ Usage
+Run the Scanner
 python main.py
 
+You will be prompted to:
+	•	Enter a target URL
+	•	Choose authenticated or unauthenticated scanning
+
+🧪 Tested Against
+
+This project has been tested against:
+	•	DVWA (local)
+	•	SQLi Labs (Less-* series)
+	•	testphp.vulnweb.com
+	•	Custom vulnerable PHP applications
+	•	Controlled lab environments
 
 ⸻
 
 ⚠️ Legal Disclaimer
 
-This tool is for educational and authorized security testing only.
+This tool is strictly for educational and authorized security testing only.
 
-Do NOT scan:
+❌ Do NOT scan:
 	•	Websites you do not own
 	•	Systems without explicit permission
 
@@ -149,25 +128,22 @@ The author is not responsible for misuse or damage caused by this tool.
 	•	Professional security tool architecture
 	•	Minimal false positives
 	•	Extensible attack engine
-	•	Resume & portfolio ready
 	•	Industry-aligned penetration testing logic
 
 ⸻
 
-🧩 Future Enhancements
-	•	Time-based SQLi
-	•	UNION-based SQLi
+🔮 Roadmap / Future Work
+	•	Time-based SQL Injection
+	•	UNION-based SQL Injection exploitation
 	•	Authenticated scanning
-	•	Session handling
-	•	JSON / HTML reports
-	•	GUI / Web dashboard
-	•	Plugin-based attack modules
+	•	Session and cookie handling
+	•	JSON / HTML reporting
+	•	Exploitation modules
+	•	Plugin-based attack architecture
+	•	Web or GUI dashboard
 
+⸻
 
+⭐ Author
 
-⭐ Support
-
-If you found this project useful:
-	•	⭐ Star the repository
-	•	🛠️ Fork and extend
-	•	📩 Open issues for improvements
+Vishal Dogra
